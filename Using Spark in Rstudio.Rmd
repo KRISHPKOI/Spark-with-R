@@ -1,0 +1,96 @@
+---
+title: "Untitled"
+author: "Krishna P Koirala"
+date: "7/5/2018"
+output:
+    md_document:
+     variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install.packages('sparklyr')
+rm(list = ls())
+#sparklyr::spark_install()
+```
+
+
+
+```{r}
+library(sparklyr)
+sc <- spark_connect(master = 'local')
+```
+
+```{r}
+library(dplyr)
+#head(iris)
+```
+
+
+
+```{r}
+iris_table <- sdf_copy_to(sc = sc, x = iris, overwrite = T)
+```
+
+
+```{r}
+src_tbls(sc)
+```
+
+
+```{r}
+# Below two syntex are same
+library(dplyr)
+iris_table %>% count
+#dplyr::count(iris_table)
+```
+
+# Data manipulation directly in spark system
+
+```{r}
+iris_table %>% mutate(Sepal_Width=ROUND(Sepal_Width*2)/2)%>%
+    group_by(Species, Sepal_Width)%>%
+    summarise(count = n(), Sepal_Length = mean(Sepal_Length), 
+              stdev = sd(Sepal_Length))
+```
+
+# bringing back to rstudio the manipulated data 
+
+```{r}
+# collecting manipulated data into the variable iris_summary
+iris_summary <- iris_table %>% mutate(Sepal_Width=ROUND(Sepal_Width*2)/2)%>%
+    group_by(Species, Sepal_Width)%>%
+    summarise(count = n(), Sepal_Length = mean(Sepal_Length), 
+              stdev = sd(Sepal_Length)) %>% collect
+```
+
+# ploting ggplot
+
+```{r}
+library(ggplot2)
+ggplot(aes(Sepal_Width, Sepal_Length, color = Species), data = iris_summary) + geom_line(size = 1) + geom_errorbar(aes(ymin = Sepal_Length-stdev, ymax = Sepal_Length + stdev), width = 0.05) + geom_text(aes(label = count), vjust = -0.2, hjust  =1.2, color = 'black') + theme(legend.position = 'top')
+```
+
+# Fit model on spark data frame(spark environment)
+
+```{r}
+fit_lm <- ml_linear_regression(x = iris_table, response = 'Sepal_Length', features = c("Sepal_Width","Petal_Length", "Petal_Width"))
+summary(fit_lm)
+```
+
+```{r}
+fit_kmeans <- ml_kmeans(x = iris_table, centers = 3, features = c("Petal_Length","Petal_Width"))
+summary(fit_kmeans)
+```
+
+# Prediction
+
+```{r}
+# predicting the whole data set
+preiction <- collect(sdf_predict(fit_kmeans, iris_table))
+```
+
+
